@@ -1,14 +1,16 @@
 import gradio as gr
 import logging
+import os
 from typing import List, Dict, Any
 from src.config import logger, AVAILABLE_LANGUAGES, TRANSLATION_LANGUAGES, CHAT_MODELS, EMBEDDING_MODELS
 from src import app_state
 from src.utils import display_info, format_time
 from src.youtube import extract_video_id, get_youtube_subtitles
-from src.processing import get_embedding_model, create_vector_db, get_existing_vector_db, get_saved_databases, load_database_by_id
-from src.blocks import process_subtitles_with_blocks, display_toc_entry, get_block_content
+from src.processing import get_embedding_model, create_vector_db, get_existing_vector_db, get_saved_databases, load_database_by_id, process_subtitles_to_documents
+from src.blocks import process_subtitles_with_blocks, display_toc_entry, get_block_content, generate_table_of_contents
 from src.chat import setup_qa_chain, chat_with_subtitles
 from src.translation import translate_subtitle_text
+from src.youtube import format_subtitles
 
 
 # Обновление функции process_video для поддержки разбиения на блоки
@@ -55,7 +57,7 @@ def process_video(youtube_url: str, embedding_model: str = "huggingface", langua
                 
                 # Разбиваем субтитры на блоки
                 blocks, toc = process_subtitles_with_blocks(subtitles, video_info)
-# Setup QA chain
+                # Setup QA chain
                 app_state.qa_chain = setup_qa_chain(app_state.vectordb, "huggingface")
                 
                 # Create formatted outputs
@@ -271,7 +273,9 @@ def load_database_from_list(db_info):
             ""
         )
 
-
+# ==============================================
+# 9. GRADIO INTERFACE
+# ==============================================
 # ==============================================
 # 9. GRADIO INTERFACE
 # ==============================================
@@ -454,12 +458,12 @@ def create_gradio_interface():
                     "",
                     "",
                     "Оглавление не найдено",
-                    gr.Dropdown.update(choices=[])
+                    gr.Dropdown(choices=[])  # Исправлено: использование конструктора вместо .update()
                 )
             
             # Обрабатываем видео
             try:
-                result = process_btn_wrapper(url, embed_model, lang)
+                result = process_video(url, embed_model, lang)  # Исправлено: использование правильной функции
             except Exception as e:
                 logger.error(f"Error processing video: {e}")
                 return (
@@ -467,7 +471,7 @@ def create_gradio_interface():
                     "",
                     "",
                     "Оглавление не найдено",
-                    gr.Dropdown.update(choices=[])
+                    gr.Dropdown(choices=[])  # Исправлено: использование конструктора вместо .update()
                 )
             
             # После обработки видео обновляем оглавление и список блоков
@@ -520,47 +524,9 @@ def create_gradio_interface():
                 logger.error(f"Error generating blocks dropdown: {e}")
             
             # Обновляем оглавление и список блоков
-            return result[0], result[1], result[2], toc, gr.Dropdown.update(choices=blocks_choices)
+            return result[0], result[1], result[2], toc, gr.Dropdown(choices=blocks_choices)  # Исправлено: использование конструктора вместо .update()
 
-
-        # Обновление интерфейса для отображения информации о наличии глав
-        def update_interface_for_chapters(demo):
-            """
-            Обновляет интерфейс для отображения информации о главах YouTube
-            
-            Args:
-                demo: Gradio интерфейс
-            """
-            with demo:
-                # Добавляем информацию о наличии глав в блок статуса
-                chapters_info = gr.HTML(label="Информация о главах")
-                
-                # Функция для обновления информации о главах
-                def update_chapters_info(url):
-                    if not url:
-                        return "Введите URL видео для проверки наличия глав"
-                    
-                    video_id = extract_video_id(url)
-                    if not video_id:
-                        return "❌ Некорректный URL видео"
-                    
-                    # Проверяем наличие глав
-                    sources = check_chapter_sources(video_id)
-                    
-                    if sources["has_chapters"]:
-                        sources_text = ", ".join(sources["sources"])
-                        chapters_count = sources.get("chapters_count", 0) or sources.get("api_chapters_count", 0)
-                        return f"✅ Найдены главы YouTube ({chapters_count}). Источник: {sources_text}"
-                    else:
-                        return "ℹ️ Главы YouTube не найдены. Будет использовано автоматическое разбиение."
-                
-                # Добавляем обработчик события для проверки наличия глав
-                youtube_url.change(
-                    fn=update_chapters_info,
-                    inputs=[youtube_url],
-                    outputs=[chapters_info]
-                )
-                
+        
         # Функция для добавления дополнительной настройки для использования глав YouTube
         def add_youtube_chapters_option(demo):
             """
@@ -601,10 +567,9 @@ def create_gradio_interface():
         # Обновление списка баз данных
         def update_db_dropdown():
             databases = get_saved_databases()
-            return gr.Dropdown.update(
-                choices=[{"value": db["video_id"], "text": f"{db['title']} ({db['video_id']})"}
-                         for db in databases] if databases else []
-            )
+            choices = [{"value": db["video_id"], "text": f"{db['title']} ({db['video_id']})"}
+                      for db in databases] if databases else []
+            return gr.Dropdown(choices=choices)  # Исправлено: использование конструктора вместо .update()
         
         refresh_db_btn.click(
             fn=update_db_dropdown,
@@ -621,7 +586,7 @@ def create_gradio_interface():
                     "",
                     "",
                     "Оглавление не найдено",
-                    gr.Dropdown.update(choices=[])
+                    gr.Dropdown(choices=[])  # Исправлено: использование конструктора вместо .update()
                 )
             
             # Если получаем словарь из Dropdown, извлекаем значение
@@ -633,12 +598,12 @@ def create_gradio_interface():
                         "",
                         "",
                         "Оглавление не найдено",
-                        gr.Dropdown.update(choices=[])
+                        gr.Dropdown(choices=[])  # Исправлено: использование конструктора вместо .update()
                     )
             
             # Загружаем базу данных
             try:
-                status, info, subtitles = load_selected_db(selected_db_id)
+                status, info, subtitles = load_database_from_list(selected_db_id)
             except Exception as e:
                 logger.error(f"Error loading database: {e}")
                 return (
@@ -646,7 +611,7 @@ def create_gradio_interface():
                     "",
                     "",
                     "Оглавление не найдено",
-                    gr.Dropdown.update(choices=[])
+                    gr.Dropdown(choices=[])  # Исправлено: использование конструктора вместо .update()
                 )
             
             # Обновляем оглавление и список блоков
@@ -690,7 +655,7 @@ def create_gradio_interface():
             except Exception as e:
                 logger.error(f"Error updating table of contents: {e}")
             
-            return status, info, subtitles, toc, gr.Dropdown.update(choices=blocks_choices)
+            return status, info, subtitles, toc, gr.Dropdown(choices=blocks_choices)  # Исправлено: использование конструктора вместо .update()
         
         load_db_btn.click(
             fn=load_selected_db_and_update_toc,

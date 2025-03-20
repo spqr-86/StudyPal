@@ -1,22 +1,28 @@
-# src/config.py
 import os
 import logging
+import platform
+from pathlib import Path
 from dotenv import load_dotenv
 from datetime import datetime
 
-# Define paths
-BASE_PATH = '/content/drive/My Drive/Colab Notebooks/Langchain'
-ENV_PATH = f'{BASE_PATH}/.env'
-DB_PATH = f'{BASE_PATH}/chroma_db'
-LOGS_PATH = f'{BASE_PATH}/logs'
+# Определение базового пути относительно текущего файла
+# Предполагается, что config.py находится в папке src
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))  # папка src
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)  # корень проекта
 
-# Create directories if they don't exist
+# Используем абсолютные пути от корня проекта
+BASE_PATH = PROJECT_ROOT
+ENV_PATH = os.path.join(BASE_PATH, '.env')
+DB_PATH = os.path.join(BASE_PATH, 'chroma_db')
+LOGS_PATH = os.path.join(BASE_PATH, 'logs')
+
+# Создаем директории, если они не существуют
 os.makedirs(BASE_PATH, exist_ok=True)
 os.makedirs(DB_PATH, exist_ok=True)
 os.makedirs(LOGS_PATH, exist_ok=True)
 
-# Setup logging
-log_file = f'{LOGS_PATH}/app_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log'
+# Настройка логирования
+log_file = os.path.join(LOGS_PATH, f'app_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -27,10 +33,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("studypal")
 
-# Function to safely get and set API tokens
+# Функция для безопасного получения и установки API токенов
 def setup_api_tokens():
     """Setup API tokens from .env file and validate their presence"""
-    # Check if .env file exists, if not create a template
+    # Проверяем наличие .env файла, если нет - создаем шаблон
     if not os.path.exists(ENV_PATH):
         logger.info(f"Creating template .env file at {ENV_PATH}")
         with open(ENV_PATH, 'w') as f:
@@ -41,7 +47,7 @@ GROQ_API_KEY=your_groq_key_here
 YOUTUBE_DATA_API_KEY=your_youtube_api_key_here
 """)
     
-    # Load environment variables
+    # Загружаем переменные окружения
     load_dotenv(ENV_PATH)
     
     api_status = {"huggingface": False, "openai": False, "groq": False, "youtube": False}
@@ -72,7 +78,7 @@ YOUTUBE_DATA_API_KEY=your_youtube_api_key_here
     
     return api_status
 
-# App configuration
+# Настройки приложения
 APP_SETTINGS = {
     "min_block_duration": 60,     # Minimum block duration in seconds
     "min_pause_threshold": 3,     # Minimum pause threshold for block separation
@@ -85,7 +91,7 @@ APP_SETTINGS = {
     "default_chat_model": "huggingface" # Default chat model
 }
 
-# Available languages for subtitles
+# Доступные языки для субтитров
 AVAILABLE_LANGUAGES = [
     {"value": "en", "text": "English"},
     {"value": "ru", "text": "Russian"},
@@ -94,7 +100,7 @@ AVAILABLE_LANGUAGES = [
     {"value": "de", "text": "German"}
 ]
 
-# Available models
+# Доступные модели
 CHAT_MODELS = [
     {"value": "huggingface", "text": "HuggingFace Model"},
     {"value": "openai", "text": "OpenAI Model"},
@@ -106,7 +112,7 @@ EMBEDDING_MODELS = [
     {"value": "openai", "text": "OpenAI Embeddings"}
 ]
 
-# Translation languages
+# Языки для перевода
 TRANSLATION_LANGUAGES = [
     {"value": "en", "text": "English"},
     {"value": "ru", "text": "Russian"},
@@ -118,5 +124,11 @@ TRANSLATION_LANGUAGES = [
     {"value": "it", "text": "Italian"}
 ]
 
-# Initialize API tokens
+# Инициализация API токенов
 api_status = setup_api_tokens()
+
+# Вывод информации о путях в лог при запуске
+logger.info(f"Base path: {BASE_PATH}")
+logger.info(f"Database path: {DB_PATH}")
+logger.info(f"Logs path: {LOGS_PATH}")
+logger.info(f"API status: {api_status}")
